@@ -90,11 +90,11 @@ class JournalVM {
     let stream = modelSession.streamResponse(
       to: prompt,
       generating: JournalReflection.self,
-      options: GenerationOptions(temperature: 2.0)
+      options: GenerationOptions(temperature: 1.0)
     )
     
     for try await item in stream {
-      let partialEntry = mapToFormattedEntry(originalText: text, reflection: item)
+      let partialEntry = mapToFormattedEntry(originalText: text, reflection: item.content)
       await MainActor.run { self.streamingEntry = partialEntry }
       lastEntry = partialEntry
     }

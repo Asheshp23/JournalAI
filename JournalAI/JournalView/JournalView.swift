@@ -6,152 +6,153 @@
 //
 import SwiftUI
 
-@available(iOS 26.0, *)
+@available(iOS 17.0, *)
 struct JournalView: View {
   @State private var vm = JournalVM()
-  @FocusState private var isTextEditorFocused: Bool
+  @FocusState private var isInputFocused: Bool
   
   var body: some View {
-    ZStack {
-      LinearGradient(
-        colors: [Color.blue.opacity(0.1), Color.purple.opacity(0.1)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-      .ignoresSafeArea()
+    ZStack(alignment: .bottom) {
+      EtherealTheme.background.ignoresSafeArea()
       
-      ZStack {
-        ScrollViewReader { proxy in
-          ScrollView {
-            inputSection
+      VStack(spacing: 0) {
+        // MARK: - Top Bar
+        HStack {
+          Image(systemName: "circle.grid.cross.fill")
+            .foregroundStyle(EtherealTheme.primary)
+          Text("The Mindful Prism")
+            .font(.system(size: 20, weight: .bold, design: .rounded))
+            .foregroundColor(EtherealTheme.primary)
+          Spacer()
+          Image(systemName: "person.crop.circle.fill")
+            .font(.title2)
+            .foregroundStyle(EtherealTheme.textSecondary.opacity(0.5))
+        }
+        .padding()
+        
+        ScrollView(showsIndicators: false) {
+          VStack(alignment: .leading, spacing: 32) {
             
-            if vm.journalEntries.isEmpty && vm.streamingEntry == nil {
-              Spacer()
-              ContentUnavailableView(
-                "No Entries Yet",
-                systemImage: "book.closed.fill",
-                description: Text("Your analyzed journal entries will appear here")
-              )
-              .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-              .padding()
-            } else {
-              entriesList
-                .padding()
-                .id("entriesList")
+            // Header
+            VStack(alignment: .leading, spacing: 8) {
+              Text("Reflection Space")
+                .font(.system(size: 38, weight: .bold, design: .rounded))
+              Text("Translate your thoughts into clarity. Let the prism illuminate the patterns within your words.")
+                .font(.subheadline)
+                .foregroundColor(EtherealTheme.textSecondary)
             }
-          }
-          .onChange(of: vm.streamingEntry) { _, newValue in
-            if newValue != nil {
-              withAnimation(.easeInOut) {
-                proxy.scrollTo("entriesList", anchor: .bottom)
+            .padding(.horizontal)
+            
+            // MARK: - Input Area
+            VStack(spacing: 16) {
+              ZStack(alignment: .topLeading) {
+                if vm.currentEntryText.isEmpty {
+                  Text("How is your heart today?")
+                    .foregroundColor(EtherealTheme.textSecondary.opacity(0.5))
+                    .padding(.top, 12)
+                    .padding(.leading, 4)
+                }
+                
+                TextEditor(text: $vm.currentEntryText)
+                  .frame(minHeight: 180)
+                  .scrollContentBackground(.hidden)
+                  .font(.system(size: 18, design: .rounded))
+                  .focused($isInputFocused)
+              }
+              
+              HStack {
+                Spacer()
+                Button(action: {
+                  isInputFocused = false
+                  Task { await vm.analyzeAndSaveEntry() }
+                }) {
+                  HStack {
+                    if vm.isProcessing {
+                      ProgressView().tint(.white)
+                    } else {
+                      Image(systemName: "sparkles")
+                    }
+                    Text(vm.isProcessing ? "Reflecting..." : "Enhance this entry")
+                      .fontWeight(.bold)
+                  }
+                  .padding(.vertical, 14)
+                  .padding(.horizontal, 24)
+                  .background(vm.currentEntryText.isEmpty ? Color.gray.opacity(0.3) : EtherealTheme.primary)
+                  .foregroundColor(.white)
+                  .cornerRadius(25)
+                }
+                .disabled(vm.currentEntryText.isEmpty || vm.isProcessing)
               }
             }
-          }
-        }
-      }
-      .navigationTitle("Journal Entry Analyzer")
-      .navigationBarTitleDisplayMode(.inline)
-    }
-  }
-  
-  private var inputSection: some View {
-    VStack(spacing: 8) {
-      TextEditor(text: $vm.currentEntryText)
-        .focused($isTextEditorFocused)
-        .frame(minHeight: 120)
-        .overlay(
-          Text("What's on your mind?")
-            .foregroundStyle(.tertiary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(20)
-            .allowsHitTesting(false)
-            .opacity(vm.currentEntryText.isEmpty ? 1 : 0)
-        )
-      HStack {
-        if !vm.currentEntryText.isEmpty {
-          Text("\(vm.currentEntryText.count) characters")
-            .font(.caption)
-            .foregroundStyle(.primary)
-          Spacer()
-          Button {
-            withAnimation {
-              vm.currentEntryText = ""
+            .padding(24)
+            .background(Color.white)
+            .cornerRadius(32)
+            .shadow(color: Color.black.opacity(0.04), radius: 20, x: 0, y: 10)
+            .padding(.horizontal)
+            
+            // MARK: - AI Insights Section
+            // Only show if we have a streaming entry or saved entries
+            if let entry = vm.streamingEntry ?? vm.journalEntries.first {
+              VStack(spacing: 24) {
+                // Section Divider
+                HStack {
+                  Rectangle().fill(EtherealTheme.divider).frame(height: 1)
+                  Text("PRISM INSIGHTS").font(.caption2).bold().tracking(2).foregroundColor(.gray)
+                  Rectangle().fill(EtherealTheme.divider).frame(height: 1)
+                }
+                
+                // Bento Grid Layout
+                InsightCard(
+                  icon: "book.fill",
+                  category: "WORD OF THE DAY",
+                  title: entry.wordOfTheDay ?? "...",
+                  detail: "A thread that weaves through your current inner landscape.",
+                  color: .blue
+                )
+                
+                if let value = entry.valueOfTheDay {
+                  InsightCard(
+                    icon: "heart.fill",
+                    category: "VALUE OF THE DAY",
+                    title: value,
+                    detail: "A guiding principle emerging from your reflection.",
+                    color: .teal
+                  )
+                }
+                
+                if let poetic = entry.poeticReflection {
+                  PoeticCard(text: poetic)
+                }
+                
+                if let impact = entry.emotionalImpact {
+                  EmotionalImpactCard(title: impact)
+                }
+                
+                if let affirmation = entry.affirmation {
+                  AffirmationCard(text: affirmation)
+                }
+              }
+              .padding(.horizontal)
+              .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(.secondary.opacity(0.8))
-              .font(.title3)
-              .padding(12)
           }
-          .buttonStyle(.plain)
-          .accessibilityLabel("Clear entry text")
+          .padding(.bottom, 120)
         }
       }
-      HStack {
-        Spacer()
-        
-        Button {
-          Task {
-            await vm.analyzeAndSaveEntry()
-          }
-        } label: {
-          HStack(spacing: 8) {
-            if vm.isProcessing {
-              ProcessingIndicator()
-            } else {
-              Image(systemName: "sparkles")
-            }
-            Text(vm.isProcessing ? "Enhancing..." : "Enhance this entry")
-              .fontWeight(.semibold)
-          }
-          .padding(.horizontal, 20)
-          .padding(.vertical, 12)
-          .background(
-            vm.isProcessing ?
-            LinearGradient(colors: [Color.purple.opacity(0.8), Color.purple.opacity(0.8)], startPoint: .top, endPoint: .bottom) :
-              LinearGradient(colors: [Color.blue, Color.purple], startPoint: .leading, endPoint: .trailing),
-            in: Capsule()
-          )
-          .foregroundColor(.white)
-          .scaleEffect(vm.isProcessing ? 1.05 : 1.0)
-          .animation(.spring(), value: vm.isProcessing)
-        }
-        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
-        .disabled(vm.currentEntryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isProcessing)
-        .opacity(vm.currentEntryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.6 : 1.0)
-      }
+      
+      // Custom Floating Tab Bar
+      CustomTabBar()
+        .padding(.horizontal)
+        .padding(.bottom, 20)
     }
-    .padding(.all)
-  }
-  
-  private var entriesList: some View {
-    LazyVStack(spacing: 16) {
-      if let streaming = vm.streamingEntry {
-        ZStack(alignment: .topTrailing) {
-          FormattedEntryCard(entry: streaming, alwaysExpanded: false)
-            .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
-          HStack(spacing: 8) {
-            ProcessingIndicator()
-            Text("Generating...")
-              .font(.caption)
-              .foregroundStyle(.primary)
-          }
-          .padding(12)
-        }
-      }
-      ForEach(Array(vm.journalEntries.enumerated()), id: \.element.id) { (offset, element) in
-        FormattedEntryCard(entry: element, alwaysExpanded: offset == 0)
-          .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
-      }
-    }
-    .padding(.vertical)
+    .animation(.spring(), value: vm.streamingEntry)
+    .animation(.spring(), value: vm.isProcessing)
   }
 }
-
 #Preview {
-  if #available(iOS 26.0, *) {
+  if #available(iOS 17.0, *) {
     JournalView()
   } else {
-    // Fallback on earlier versions
+    Text("iOS 17+ required")
   }
 }
