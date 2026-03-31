@@ -11,32 +11,86 @@ import FoundationModels
 import ImagePlayground
 import SwiftUI
 import UIKit
+import UserNotifications
 
 @available(iOS 26.0, *)
-enum AppTab: String, CaseIterable, Hashable {
-  case reflect
-  case timeline
-  case insights
+enum JournalRitualTemplate: String, CaseIterable, Hashable {
+  case threeGoodThings
+  case morningReset
+  case eveningReflection
+  case freewrite
   
   var title: String {
     switch self {
-    case .reflect:
-      return "Reflect"
-    case .timeline:
-      return "Timeline"
-    case .insights:
-      return "Insights"
+    case .threeGoodThings:
+      return "3 Good Things"
+    case .morningReset:
+      return "Morning Reset"
+    case .eveningReflection:
+      return "Evening Reflection"
+    case .freewrite:
+      return "Freewrite"
     }
   }
   
   var systemImage: String {
     switch self {
-    case .reflect:
+    case .threeGoodThings:
+      return "heart.text.square"
+    case .morningReset:
+      return "sunrise.fill"
+    case .eveningReflection:
+      return "moon.stars.fill"
+    case .freewrite:
       return "square.and.pencil"
-    case .timeline:
-      return "clock.arrow.circlepath"
-    case .insights:
-      return "sparkles.rectangle.stack"
+    }
+  }
+  
+  var subtitle: String {
+    switch self {
+    case .threeGoodThings:
+      return "A proven gratitude ritual that keeps the daily habit simple."
+    case .morningReset:
+      return "Start the day by noticing what is already supportive."
+    case .eveningReflection:
+      return "Close the day with gratitude, learning, and softness."
+    case .freewrite:
+      return "A blank page when you want to think in your own shape."
+    }
+  }
+  
+  var starterText: String {
+    switch self {
+    case .threeGoodThings:
+      return """
+      Three good things from today:
+      1.
+      2.
+      3.
+      
+      Why they mattered:
+      -
+      """
+    case .morningReset:
+      return """
+      Today I want to notice:
+      
+      Something I am already grateful for:
+      
+      A kind intention for myself:
+      """
+    case .eveningReflection:
+      return """
+      What felt good today?
+      
+      What challenged me?
+      
+      What am I grateful for right now?
+      
+      How do I want to close the day?
+      """
+    case .freewrite:
+      return ""
     }
   }
 }
@@ -51,10 +105,25 @@ struct JournalInsightMetrics {
 }
 
 @available(iOS 26.0, *)
+struct StreakDay: Identifiable {
+  let id = UUID()
+  let label: String
+  let isCompleted: Bool
+  let isToday: Bool
+}
+
+@available(iOS 26.0, *)
+struct StoryBeat: Identifiable {
+  let id = UUID()
+  let title: String
+  let body: String
+  let systemImage: String
+}
+
+@available(iOS 26.0, *)
 enum JournalRepository {
   nonisolated(unsafe) private static let entriesKey = "journal.entries"
   nonisolated(unsafe) private static let pendingDraftKey = "journal.pendingDraft"
-  nonisolated(unsafe) private static let pendingTabKey = "journal.pendingTab"
   
   nonisolated(unsafe) private static let encoder = JSONEncoder()
   nonisolated(unsafe) private static let decoder = JSONDecoder()
@@ -101,20 +170,6 @@ enum JournalRepository {
     return draft
   }
   
-  nonisolated static func savePendingTab(_ tab: AppTab?) {
-    if let tab {
-      UserDefaults.standard.set(tab.rawValue, forKey: pendingTabKey)
-    } else {
-      UserDefaults.standard.removeObject(forKey: pendingTabKey)
-    }
-  }
-  
-  nonisolated static func takePendingTab() -> AppTab? {
-    let rawValue = UserDefaults.standard.string(forKey: pendingTabKey)
-    UserDefaults.standard.removeObject(forKey: pendingTabKey)
-    guard let rawValue else { return nil }
-    return AppTab(rawValue: rawValue)
-  }
 }
 
 @available(iOS 26.0, *)
@@ -135,9 +190,10 @@ final class JournalVM: ObservableObject {
   @Published var currentEntryText = ""
   @Published var isProcessing = false
   @Published var streamingEntry: FormattedJournalEntry?
-  @Published var selectedTab: AppTab = .reflect
   @Published var statusMessage: String?
   @Published var selectedPrompt: String?
+  @Published var selectedRitual: JournalRitualTemplate = .threeGoodThings
+  @Published var hasAskedForMindfulPrism = false
   
   private let modelSession = LanguageModelSession()
   
@@ -156,6 +212,172 @@ final class JournalVM: ObservableObject {
   
   var latestAffirmation: String? {
     journalEntries.first { !($0.affirmation ?? "").isEmpty }?.affirmation
+  }
+  
+  var displayedStoryEntry: FormattedJournalEntry? {
+    if hasAskedForMindfulPrism {
+      return latestEntry
+    }
+    
+    return journalEntries.first
+  }
+  
+  var throwbackEntry: FormattedJournalEntry? {
+    let cutoffDate = Calendar.current.date(byAdding: .day, value: -3, to: Date()) ?? Date.distantPast
+    return journalEntries.first(where: { $0.timestamp < cutoffDate })
+  }
+  
+  var latestGratitudeItems: [String] {
+    guard let gratitude = latestEntry?.gratitude else { return [] }
+    
+    return [
+      gratitude.needsMet,
+      gratitude.momentsShared,
+      gratitude.quietBlessings
+    ]
+    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    .filter { !$0.isEmpty }
+  }
+  
+  var onThisDayEntry: FormattedJournalEntry? {
+    let calendar = Calendar.current
+    let today = Date()
+    let currentMonth = calendar.component(.month, from: today)
+    let currentDay = calendar.component(.day, from: today)
+    
+    return journalEntries.first {
+      let month = calendar.component(.month, from: $0.timestamp)
+      let day = calendar.component(.day, from: $0.timestamp)
+      return month == currentMonth && day == currentDay && !calendar.isDate($0.timestamp, inSameDayAs: today)
+    }
+  }
+  
+  var streakWeek: [StreakDay] {
+    let calendar = Calendar.current
+    let today = calendar.startOfDay(for: Date())
+    let formatter = DateFormatter()
+    formatter.dateFormat = "EEEEE"
+    
+    return (0..<7).compactMap { offset in
+      guard let date = calendar.date(byAdding: .day, value: offset - 6, to: today) else { return nil }
+      let isCompleted = journalEntries.contains { calendar.isDate($0.timestamp, inSameDayAs: date) }
+      return StreakDay(
+        label: formatter.string(from: date),
+        isCompleted: isCompleted,
+        isToday: calendar.isDate(date, inSameDayAs: today)
+      )
+    }
+  }
+  
+  var storyTitle: String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "EEEE, MMM d"
+    return "Chapter for \(formatter.string(from: Date()))"
+  }
+  
+  var adaptiveNudge: String {
+    let calendar = Calendar.current
+    let hour = calendar.component(.hour, from: Date())
+    let weekday = calendar.weekdaySymbols[calendar.component(.weekday, from: Date()) - 1]
+    
+    switch hour {
+    case 5..<12:
+      return "Good morning. It’s \(weekday), a gentle time to notice one thing already supporting you."
+    case 12..<17:
+      return "This \(weekday) afternoon, what small moment has been quietly good so far?"
+    case 17..<22:
+      return "As \(weekday) slows down, what deserves gratitude before the day closes?"
+    default:
+      return "It’s late on \(weekday). What can you thank today for before you rest?"
+    }
+  }
+  
+  var chapterPrompt: String {
+    let calendar = Calendar.current
+    let weekday = calendar.weekdaySymbols[calendar.component(.weekday, from: Date()) - 1]
+    
+    switch selectedRitual {
+    case .threeGoodThings:
+      return "Tell the story of three bright moments from this \(weekday)."
+    case .morningReset:
+      return "Open today like a first page. What feeling do you want guiding the chapter?"
+    case .eveningReflection:
+      return "If today were a scene in your life, what moment would you keep?"
+    case .freewrite:
+      return "Write this day as it felt, not as it should have been."
+    }
+  }
+  
+  var storyBeats: [StoryBeat] {
+    guard let entry = displayedStoryEntry else { return [] }
+    
+    var beats: [StoryBeat] = []
+    
+    let openingLine = entry.originalText.preview(limit: 120)
+    if !openingLine.isEmpty {
+      beats.append(
+        StoryBeat(
+          title: "Opening Scene",
+          body: openingLine,
+          systemImage: "text.alignleft"
+        )
+      )
+    }
+    
+    if let gratitude = entry.gratitude {
+      let details = [
+        gratitude.needsMet,
+        gratitude.momentsShared,
+        gratitude.quietBlessings
+      ]
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+      .joined(separator: " • ")
+      
+      if !details.isEmpty {
+        beats.append(
+          StoryBeat(
+            title: "Quiet Gifts",
+            body: details,
+            systemImage: "gift.fill"
+          )
+        )
+      }
+    }
+    
+    if hasAskedForMindfulPrism, let affirmation = entry.affirmation {
+      beats.append(
+        StoryBeat(
+          title: "Mindful Prism",
+          body: affirmation,
+          systemImage: "sparkles.rectangle.stack"
+        )
+      )
+    } else if let emotionalImpact = entry.emotionalImpact {
+      beats.append(
+        StoryBeat(
+          title: "What Stayed",
+          body: emotionalImpact,
+          systemImage: "waveform.path.ecg"
+        )
+      )
+    }
+    
+    if let tomorrowIntention = entry.tomorrowIntention {
+      beats.append(
+        StoryBeat(
+          title: "Next Page",
+          body: tomorrowIntention,
+          systemImage: "arrow.right.circle.fill"
+        )
+      )
+    }
+    
+    return beats
+  }
+  
+  var storyArchive: [FormattedJournalEntry] {
+    Array(journalEntries.prefix(8))
   }
   
   var metrics: JournalInsightMetrics {
@@ -194,13 +416,8 @@ final class JournalVM: ObservableObject {
   }
   
   func consumePendingIntentState() {
-    if let pendingTab = JournalRepository.takePendingTab() {
-      selectedTab = pendingTab
-    }
-    
     if let pendingDraft = JournalRepository.takePendingDraft() {
       currentEntryText = pendingDraft
-      selectedTab = .reflect
       statusMessage = "Siri opened a fresh reflection for you."
     }
   }
@@ -212,7 +429,15 @@ final class JournalVM: ObservableObject {
   func applyPrompt(_ prompt: String) {
     selectedPrompt = prompt
     currentEntryText = prompt
-    selectedTab = .reflect
+    hasAskedForMindfulPrism = false
+  }
+  
+  func applyRitual(_ ritual: JournalRitualTemplate) {
+    selectedRitual = ritual
+    hasAskedForMindfulPrism = false
+    
+    guard !ritual.starterText.isEmpty else { return }
+    currentEntryText = ritual.starterText
   }
   
   func saveQuickCapture() {
@@ -226,7 +451,42 @@ final class JournalVM: ObservableObject {
     persistEntries()
     currentEntryText = ""
     statusMessage = "Quick capture saved. You can reflect on it later."
-    selectedTab = .timeline
+    hasAskedForMindfulPrism = false
+  }
+  
+  func askForMindfulPrism() {
+    hasAskedForMindfulPrism = true
+  }
+  
+  func scheduleDailyReminder(hour: Int, title: String, body: String) async {
+    let center = UNUserNotificationCenter.current()
+    let granted = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+    guard granted == true else {
+      statusMessage = "Notifications are off. You can enable them in Settings."
+      return
+    }
+    
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = body
+    content.sound = .default
+    
+    var components = DateComponents()
+    components.hour = hour
+    components.minute = 0
+    
+    let request = UNNotificationRequest(
+      identifier: "journalai.reminder.\(hour)",
+      content: content,
+      trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+    )
+    
+    center.removePendingNotificationRequests(withIdentifiers: [
+      "journalai.reminder.8",
+      "journalai.reminder.20"
+    ])
+    try? await center.add(request)
+    statusMessage = "Daily reminder scheduled."
   }
   
   func analyzeAndSaveEntry() async {
@@ -245,8 +505,8 @@ final class JournalVM: ObservableObject {
       journalEntries.insert(formattedEntry, at: 0)
       persistEntries()
       currentEntryText = ""
-      statusMessage = "Reflection ready. Your new insight has been saved."
-      selectedTab = .insights
+      statusMessage = "Your new chapter has been shaped and saved."
+      hasAskedForMindfulPrism = true
     } catch {
       statusMessage = "Reflection failed. Your draft is still here."
       print("Failed to process entry: \(error)")
@@ -282,8 +542,7 @@ final class JournalVM: ObservableObject {
       journalEntries.insert(savedEntry, at: 0)
       persistEntries()
       currentEntryText = ""
-      statusMessage = "Reflection image saved to your timeline."
-      selectedTab = .timeline
+      statusMessage = "Reflection image saved to your journal history."
     } catch {
       statusMessage = "Image generation was unavailable just now."
       print("Failed to generate image: \(error)")
@@ -394,8 +653,8 @@ final class JournalVM: ObservableObject {
   
   private func buildStructuredPrompt(from text: String) -> String {
     """
-    Act as a warm, insightful journaling guide.
-    Transform the user's note into a grounded reflection.
+    Act as a warm, insightful gratitude journaling guide.
+    Transform the user's note into a grounded gratitude reflection.
     
     User note:
     \(text)
@@ -403,7 +662,7 @@ final class JournalVM: ObservableObject {
     Produce:
     - a word of the day
     - a value of the day
-    - gratitude with needs met, moments shared, and quiet blessings
+    - gratitude with needs met, moments shared, and quiet blessings, always grounded in concrete details
     - contributions with creative work, service, and presence offered
     - a short poetic reflection
     - one emotional impact sentence
@@ -412,6 +671,7 @@ final class JournalVM: ObservableObject {
     - a gentle intention for tomorrow
     
     Guidelines:
+    - Prioritize appreciation, perspective, and emotional honesty over self-optimization
     - Stay faithful to the user's tone and lived experience
     - Be specific, emotionally intelligent, and concise
     - If a section is not supported by the note, return "Not present today"
@@ -477,7 +737,6 @@ struct StartReflectionIntent: AppIntent {
   }
   
   func perform() async throws -> some IntentResult & ProvidesDialog {
-    JournalRepository.savePendingTab(.reflect)
     JournalRepository.savePendingDraft(prompt)
     return .result(dialog: IntentDialog("Opening JournalAI for your next reflection."))
   }
@@ -485,8 +744,8 @@ struct StartReflectionIntent: AppIntent {
 
 @available(iOS 26.0, *)
 struct ReviewLatestInsightIntent: AppIntent {
-  static let title: LocalizedStringResource = "Review Latest Insight"
-  static let description = IntentDescription("Hear the latest affirmation or insight from your journal.")
+  static let title: LocalizedStringResource = "Review Latest Chapter"
+  static let description = IntentDescription("Hear the latest affirmation or story beat from your journal.")
   
   func perform() async throws -> some IntentResult & ProvidesDialog {
     guard let latestEntry = JournalRepository.latestEntry() else {
@@ -497,7 +756,7 @@ struct ReviewLatestInsightIntent: AppIntent {
       return .result(dialog: IntentDialog("Your latest affirmation is: \(affirmation)"))
     }
     
-    return .result(dialog: IntentDialog("Your latest journal insight is \(latestEntry.heroTitle)."))
+    return .result(dialog: IntentDialog("Your latest saved chapter is \(latestEntry.heroTitle)."))
   }
 }
 
@@ -524,14 +783,14 @@ struct JournalAppShortcuts: AppShortcutsProvider {
       systemImageName: "square.and.pencil"
     )
     
-    AppShortcut(
-      intent: ReviewLatestInsightIntent(),
-      phrases: [
-        "What is my latest insight in \(.applicationName)",
-        "Read my affirmation from \(.applicationName)"
-      ],
-      shortTitle: "Latest Insight",
-      systemImageName: "sparkles"
-    )
+      AppShortcut(
+        intent: ReviewLatestInsightIntent(),
+        phrases: [
+          "What is my latest chapter in \(.applicationName)",
+          "Read my affirmation from \(.applicationName)"
+        ],
+        shortTitle: "Latest Chapter",
+        systemImageName: "sparkles"
+      )
   }
 }
