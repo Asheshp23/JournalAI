@@ -1,73 +1,60 @@
-# Mindful Journal AI
+# JournalAI
 
-🌿 A simple iOS journaling app that uses Apple's on-device Foundation Models to turn your daily notes into structured, mindful reflections.
+JournalAI is a mindful iOS journaling app that treats each day like a chapter instead of a checklist.
+It combines calm, story-based writing with Apple's on-device Foundation Models so reflection can stay private, gentle, and lightweight.
 
-The goal is not productivity, but presence. It combines free-form writing with AI-assisted structuring to help you witness your life, not just record it.
+## Product Direction
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/497f4ab2-0ed6-4001-9d96-049785f10af4" alt="Mindful Journal AI" width="300"/>
-  <br/>
-  <em>(Mindful Journal AI)</em>
-</p>
+Most journal apps fall into one of a few buckets:
+- life logging
+- prompt-heavy habit tracking
+- mood dashboards
+- AI summaries
 
----
+JournalAI aims for a different feeling:
+- one quiet screen
+- one page at a time
+- a story-first writing flow
+- optional AI shaping only when the user asks for it
 
-## How It Works
+## Current Experience
 
-1.  **✍️ Write Freely:** Jot down raw, honest notes about your day.
-2.  **🧠 Reflect with AI:** With one tap, the on-device AI processes your notes privately.
-3.  **💖 Receive:** Get a beautifully structured journal entry to review and save.
-
-## Features
-
--   **AI-Powered Reflections** using Apple's Foundation Models.
--   **100% On-Device & Private:** Your data never leaves your device.
--   **Mindful, Structured Output:** Organizes thoughts into categories like gratitude, contributions, and more.
--   **Clean, Minimalist UI:** A calm space for your thoughts.
-
-<details>
-<summary><strong>Click to see a sample journal entry</strong></summary>
-
-> ### 🪶 Word of the Day: Belonging
-> ### 💠 Value of the Day: Connection
->
-> ---
->
-> **🌅 Gratitude**
-> - Morning tea made by Mum, warm hands and warmer heart
-> - A roof overhead, clean water, food shared in quiet
->
-> **🌱 Contributions**
-> - Progress on the gud-prompt iOS app
-> - Cleaned the shared space as an act of quiet care
->
-> **🎨 Poetic Reflection**
-> > Tea warmed my hands, and so did her laugh
-> > The day stitched joy into quiet cloth
->
-> **💞 Emotional Impact**
-> - I felt grounded and connected, like a thread in the great weaving.
->
-> **✨ Affirmation**
-> - I belong here. I am whole, even in fragments.
-
-</details>
+- Story-based daily writing with chapter framing
+- Guided rituals like `3 Good Things`, `Morning Reset`, and `Evening Reflection`
+- Time-and-day-aware mindful nudges
+- Local persistence for saved entries
+- Memory resurfacing through rewind and "on this day" moments
+- Siri/App Intents support for quick capture and opening the app into reflection
+- Optional `Mindful Prism` shaping instead of always-on AI output
 
 ## Tech Stack
 
--   **SwiftUI**
--   **Swift**
--   **Core ML** & **Apple's Foundation Models** (iOS 18+ / macOS 15+)
+- SwiftUI
+- Swift
+- App Intents
+- UserNotifications
+- Apple's Foundation Models
+- Image Playground
+
+## Project Notes
+
+- The app currently targets iOS 26.
+- Journal entries are stored locally with `UserDefaults`.
+- AI struct generation is powered by `FoundationModels` in [JournalAI/Models/JournalReflection.swift](JournalAI/Models/JournalReflection.swift).
+
+## Local Build Caveat
+
+In this environment, builds are blocked by the `FoundationModels` macro/plugin pipeline rather than the app UI code itself.
+The failing area is the macro-backed schema in `JournalReflection.swift`.
 
 ## Getting Started
 
-1.  Clone the repository:
-    ```sh
-    git clone https://github.com/your-username/your-repo-name.git
-    ```
-2.  Open the project in Xcode.
-3.  Build and run on a compatible simulator or device.
+1. Open `JournalAI.xcodeproj` in Xcode.
+2. Build on a compatible iPhone or supported iOS runtime.
+3. Start with a ritual, write a page, and only ask `Mindful Prism` if you want the extra shaping.
 
-## Contributing
+## Next Good Improvements
 
-Contributions are welcome! Please feel free to open an issue or submit a pull request.
+- Replace the current generated reflection schema with a fallback path for environments where Foundation Models macros are unavailable
+- Add export/share for saved chapters
+- Add richer chapter browsing without losing the minimal, mindful feel

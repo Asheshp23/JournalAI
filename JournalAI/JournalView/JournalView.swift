@@ -5,27 +5,48 @@
 //  Created by Ashesh Patel on 2025-06-06.
 //
 import SwiftUI
+import UIKit
 
 @available(iOS 26.0, *)
 struct JournalView: View {
   @ObservedObject var vm: JournalVM
   @FocusState private var isInputFocused: Bool
+  @State private var selectedEntry: FormattedJournalEntry?
   
   var body: some View {
     NavigationStack {
-      ScrollView(showsIndicators: false) {
-        VStack(alignment: .leading, spacing: 24) {
-          nudgeCard
-          ritualStrip
-          composerCard
-          storyBeatsSection
-          memorySection
-          archiveSection
+      ScrollViewReader { proxy in
+        ScrollView(showsIndicators: false) {
+          VStack(alignment: .leading, spacing: 24) {
+            Color.clear
+              .frame(height: 1)
+              .id("top")
+            nudgeCard
+            ritualStrip
+            composerCard
+              .id("composer")
+            storyBeatsSection
+            memorySection
+            archiveSection
+          }
+          .padding(20)
         }
-        .padding(20)
+        .background(EtherealTheme.background.ignoresSafeArea())
+        .navigationBarTitleDisplayMode(.inline)
+        .scrollDismissesKeyboard(.interactively)
+        .onChange(of: isInputFocused) { _, focused in
+          guard focused else { return }
+          withAnimation(.easeInOut(duration: 0.25)) {
+            proxy.scrollTo("composer", anchor: .center)
+          }
+        }
+        .sheet(item: $selectedEntry) { entry in
+          ChapterDetailSheet(entry: entry) {
+            vm.toggleFavorite(entryID: entry.id)
+            selectedEntry = vm.journalEntries.first(where: { $0.id == entry.id })
+          }
+        }
       }
-      .background(EtherealTheme.background.ignoresSafeArea())
-      .navigationBarTitleDisplayMode(.inline)
     }
   }
   
@@ -149,16 +170,20 @@ struct JournalView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(SecondaryActionButtonStyle())
+        .accessibilityLabel("Save chapter")
+        .accessibilityHint("Saves this page without asking the mindful prism to shape it.")
         .disabled(vm.currentEntryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isProcessing)
         
         Button {
           isInputFocused = false
-          Task { await vm.analyzeAndSaveEntry() }
+          Task { await vm.analyzeAndSaveEntry(showMindfulPrism: false) }
         } label: {
           Label(vm.isProcessing ? "Shaping..." : "Shape Story", systemImage: "wand.and.stars")
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(PrimaryActionButtonStyle())
+        .accessibilityLabel("Shape story")
+        .accessibilityHint("Transforms your writing into a softer story structure.")
         .disabled(!vm.currentEntryText.trimmingCharacters(in: .whitespacesAndNewlines).isMeaningful || vm.isProcessing)
       }
       
@@ -166,13 +191,14 @@ struct JournalView: View {
         Button {
           isInputFocused = false
           vm.askForMindfulPrism()
-          Task { await vm.analyzeAndSaveEntry() }
+          Task { await vm.analyzeAndSaveEntry(showMindfulPrism: true) }
         } label: {
           Label("Ask Mindful Prism", systemImage: "sparkles.rectangle.stack")
             .font(.subheadline.weight(.semibold))
         }
         .buttonStyle(.plain)
         .foregroundStyle(EtherealTheme.primary)
+        .accessibilityHint("Shows the mindful prism version only when you explicitly ask for it.")
         .disabled(!vm.currentEntryText.trimmingCharacters(in: .whitespacesAndNewlines).isMeaningful || vm.isProcessing)
         
         Spacer()
@@ -186,6 +212,7 @@ struct JournalView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(EtherealTheme.secondary)
+        .accessibilityHint("Generates an image inspired by your saved writing.")
         .disabled(!vm.currentEntryText.trimmingCharacters(in: .whitespacesAndNewlines).isMeaningful || vm.isProcessing)
       }
     }
@@ -272,6 +299,10 @@ struct JournalView: View {
           .padding(18)
           .background(Color.white)
           .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+          .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+          .onTapGesture {
+            selectedEntry = entry
+          }
         }
       }
     }
@@ -294,6 +325,9 @@ struct JournalView: View {
             endPoint: .bottomTrailing
           )
         )
+        .onTapGesture {
+          selectedEntry = onThisDay
+        }
       }
       
       if let throwback = vm.throwbackEntry {
@@ -308,8 +342,98 @@ struct JournalView: View {
             endPoint: .bottomTrailing
           )
         )
+        .onTapGesture {
+          selectedEntry = throwback
+        }
       }
     }
+  }
+}
+
+@available(iOS 26.0, *)
+private struct ChapterDetailSheet: View {
+  let entry: FormattedJournalEntry
+  let onToggleFavorite: () -> Void
+  @Environment(\.dismiss) private var dismiss
+  
+  var body: some View {
+    NavigationStack {
+      ScrollView(showsIndicators: false) {
+        VStack(alignment: .leading, spacing: 20) {
+          VStack(alignment: .leading, spacing: 8) {
+            Text(entry.heroTitle)
+              .font(.largeTitle.bold())
+              .foregroundStyle(EtherealTheme.textMain)
+            Text(entry.displayDate)
+              .font(.subheadline)
+              .foregroundStyle(EtherealTheme.textSecondary)
+          }
+          
+          DetailSection(title: "Original Writing", bodyText: entry.originalText)
+          
+          if let poeticReflection = entry.poeticReflection {
+            DetailSection(title: "Poetic Reflection", bodyText: poeticReflection)
+          }
+          
+          if let emotionalImpact = entry.emotionalImpact {
+            DetailSection(title: "What Stayed", bodyText: emotionalImpact)
+          }
+          
+          if let affirmation = entry.affirmation {
+            DetailSection(title: "Affirmation", bodyText: affirmation)
+          }
+          
+          if let tomorrowIntention = entry.tomorrowIntention {
+            DetailSection(title: "Next Page", bodyText: tomorrowIntention)
+          }
+          
+          if let imageData = entry.imageData, let image = UIImage(data: imageData) {
+            VStack(alignment: .leading, spacing: 10) {
+              Text("Illustrated Scene")
+                .font(.headline)
+              Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+          }
+        }
+        .padding(20)
+      }
+      .background(EtherealTheme.background.ignoresSafeArea())
+      .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Button("Done") {
+            dismiss()
+          }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+          Button(action: onToggleFavorite) {
+            Image(systemName: entry.isFavorite ? "heart.fill" : "heart")
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct DetailSection: View {
+  let title: String
+  let bodyText: String
+  
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(title)
+        .font(.headline)
+        .foregroundStyle(EtherealTheme.primary)
+      Text(bodyText)
+        .font(.body)
+        .foregroundStyle(EtherealTheme.textMain)
+    }
+    .padding(18)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color.white)
+    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
   }
 }
 

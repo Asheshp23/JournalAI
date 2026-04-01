@@ -489,7 +489,7 @@ final class JournalVM: ObservableObject {
     statusMessage = "Daily reminder scheduled."
   }
   
-  func analyzeAndSaveEntry() async {
+  func analyzeAndSaveEntry(showMindfulPrism: Bool = false) async {
     let trimmed = currentEntryText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard trimmed.isMeaningful else { return }
     
@@ -506,7 +506,7 @@ final class JournalVM: ObservableObject {
       persistEntries()
       currentEntryText = ""
       statusMessage = "Your new chapter has been shaped and saved."
-      hasAskedForMindfulPrism = true
+      hasAskedForMindfulPrism = showMindfulPrism
     } catch {
       statusMessage = "Reflection failed. Your draft is still here."
       print("Failed to process entry: \(error)")

@@ -17,6 +17,7 @@ struct JournalAIApp: App {
   var body: some Scene {
     WindowGroup {
       ContentView()
+        .tint(EtherealTheme.primary)
     }
   }
 }
