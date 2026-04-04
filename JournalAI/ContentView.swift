@@ -34,25 +34,17 @@ private struct StatusBanner: View {
   var body: some View {
     HStack(spacing: 12) {
       Image(systemName: "sparkles")
-        .foregroundStyle(.white)
+        .foregroundStyle(EtherealTheme.primary)
       Text(message)
         .font(.subheadline.weight(.medium))
-        .foregroundStyle(.white)
+        .foregroundStyle(EtherealTheme.textMain)
       Spacer()
       Button("Dismiss", action: dismiss)
         .font(.caption.bold())
-        .foregroundStyle(.white.opacity(0.9))
+        .foregroundStyle(EtherealTheme.primary)
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 14)
-    .background(
-      LinearGradient(
-        colors: [EtherealTheme.primary, EtherealTheme.secondary],
-        startPoint: .leading,
-        endPoint: .trailing
-      )
-    )
-    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-    .shadow(color: EtherealTheme.primary.opacity(0.25), radius: 16, x: 0, y: 8)
+    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
   }
 }

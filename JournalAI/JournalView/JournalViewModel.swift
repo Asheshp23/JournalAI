@@ -7,7 +7,6 @@
 import AppIntents
 import Combine
 import Foundation
-import FoundationModels
 import ImagePlayground
 import SwiftUI
 import UIKit
@@ -20,42 +19,46 @@ enum JournalRitualTemplate: String, CaseIterable, Hashable {
   case eveningReflection
   case freewrite
   
+  /// Returns the most appropriate template based on the current time of day.
+  static var recommended: JournalRitualTemplate {
+    let hour = Calendar.current.component(.hour, from: Date())
+    
+    switch hour {
+    case 5..<11:   // 5 AM - 10:59 AM
+      return .morningReset
+    case 11..<17:  // 11 AM - 4:59 PM
+      return .threeGoodThings
+    case 17..<24, 0..<5: // 5 PM - 4:59 AM
+      return .eveningReflection
+    default:
+      return .freewrite
+    }
+  }
+  
   var title: String {
     switch self {
-    case .threeGoodThings:
-      return "3 Good Things"
-    case .morningReset:
-      return "Morning Reset"
-    case .eveningReflection:
-      return "Evening Reflection"
-    case .freewrite:
-      return "Freewrite"
+    case .threeGoodThings: return "3 Good Things"
+    case .morningReset: return "Morning Reset"
+    case .eveningReflection: return "Evening Reflection"
+    case .freewrite: return "Freewrite"
     }
   }
   
   var systemImage: String {
     switch self {
-    case .threeGoodThings:
-      return "heart.text.square"
-    case .morningReset:
-      return "sunrise.fill"
-    case .eveningReflection:
-      return "moon.stars.fill"
-    case .freewrite:
-      return "square.and.pencil"
+    case .threeGoodThings: return "heart.text.square"
+    case .morningReset: return "sunrise.fill"
+    case .eveningReflection: return "moon.stars.fill"
+    case .freewrite: return "square.and.pencil"
     }
   }
   
   var subtitle: String {
     switch self {
-    case .threeGoodThings:
-      return "A proven gratitude ritual that keeps the daily habit simple."
-    case .morningReset:
-      return "Start the day by noticing what is already supportive."
-    case .eveningReflection:
-      return "Close the day with gratitude, learning, and softness."
-    case .freewrite:
-      return "A blank page when you want to think in your own shape."
+    case .threeGoodThings: return "A proven gratitude ritual that keeps the daily habit simple."
+    case .morningReset: return "Start the day by noticing what is already supportive."
+    case .eveningReflection: return "Close the day with gratitude, learning, and softness."
+    case .freewrite: return "A blank page when you want to think in your own shape."
     }
   }
   
@@ -63,38 +66,37 @@ enum JournalRitualTemplate: String, CaseIterable, Hashable {
     switch self {
     case .threeGoodThings:
       return """
-      Three good things from today:
-      1.
-      2.
-      3.
-      
-      Why they mattered:
-      -
-      """
+            Three good things from today:
+            1.
+            2.
+            3.
+            
+            Why they mattered:
+            -
+            """
     case .morningReset:
       return """
-      Today I want to notice:
-      
-      Something I am already grateful for:
-      
-      A kind intention for myself:
-      """
+            Today I want to notice:
+            
+            Something I am already grateful for:
+            
+            A kind intention for myself:
+            """
     case .eveningReflection:
       return """
-      What felt good today?
-      
-      What challenged me?
-      
-      What am I grateful for right now?
-      
-      How do I want to close the day?
-      """
+            What felt good today?
+            
+            What challenged me?
+            
+            What am I grateful for right now?
+            
+            How do I want to close the day?
+            """
     case .freewrite:
       return ""
     }
   }
 }
-
 @available(iOS 26.0, *)
 struct JournalInsightMetrics {
   let totalEntries: Int
@@ -121,28 +123,21 @@ struct StoryBeat: Identifiable {
 }
 
 @available(iOS 26.0, *)
+@MainActor
 enum JournalRepository {
-  nonisolated(unsafe) private static let entriesKey = "journal.entries"
-  nonisolated(unsafe) private static let pendingDraftKey = "journal.pendingDraft"
+  private static let pendingDraftKey = "intent.pendingDraft"
+  private static let autosaveDraftKey = "editor.autosaveDraft"
   
-  nonisolated(unsafe) private static let encoder = JSONEncoder()
-  nonisolated(unsafe) private static let decoder = JSONDecoder()
-  
-  nonisolated static func loadEntries() -> [FormattedJournalEntry] {
-    guard let data = UserDefaults.standard.data(forKey: entriesKey) else {
-      return []
-    }
-    
-    return (try? decoder.decode([FormattedJournalEntry].self, from: data)) ?? []
+  static func loadEntries() -> [FormattedJournalEntry] {
+    JournalDataStore.shared.loadEntries()
   }
   
-  nonisolated static func saveEntries(_ entries: [FormattedJournalEntry]) {
-    guard let data = try? encoder.encode(entries) else { return }
-    UserDefaults.standard.set(data, forKey: entriesKey)
+  static func saveEntries(_ entries: [FormattedJournalEntry]) {
+    JournalDataStore.shared.replaceEntries(entries)
   }
   
   @discardableResult
-  nonisolated static func captureQuickEntry(text: String, source: String) -> FormattedJournalEntry {
+  static func captureQuickEntry(text: String, source: String) -> FormattedJournalEntry {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     let entry = FormattedJournalEntry(originalText: trimmed, captureSource: source)
     var entries = loadEntries()
@@ -151,35 +146,44 @@ enum JournalRepository {
     return entry
   }
   
-  nonisolated static func latestEntry() -> FormattedJournalEntry? {
-    loadEntries().sorted { $0.timestamp > $1.timestamp }.first
+  static func latestEntry() -> FormattedJournalEntry? {
+    JournalDataStore.shared.latestEntry()
   }
   
-  nonisolated static func savePendingDraft(_ draft: String?) {
-    let trimmed = draft?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if trimmed.isEmpty {
-      UserDefaults.standard.removeObject(forKey: pendingDraftKey)
-    } else {
-      UserDefaults.standard.set(trimmed, forKey: pendingDraftKey)
-    }
+  static func savePendingDraft(_ draft: String?) {
+    JournalDataStore.shared.saveDraft(draft, for: pendingDraftKey)
   }
   
-  nonisolated static func takePendingDraft() -> String? {
-    let draft = UserDefaults.standard.string(forKey: pendingDraftKey)
-    UserDefaults.standard.removeObject(forKey: pendingDraftKey)
-    return draft
+  static func takePendingDraft() -> String? {
+    JournalDataStore.shared.takeDraft(for: pendingDraftKey)
   }
-  
+
+  static func saveAutosaveDraft(_ draft: String?) {
+    JournalDataStore.shared.saveDraft(draft, for: autosaveDraftKey)
+  }
+
+  static func loadAutosaveDraft() -> String? {
+    JournalDataStore.shared.loadDraft(for: autosaveDraftKey)
+  }
+
+  static func clearAutosaveDraft() {
+    JournalDataStore.shared.deleteDraft(for: autosaveDraftKey)
+  }
 }
 
 @available(iOS 26.0, *)
 enum JournalPromptProvider {
   static let prompts = [
-    "What drained me today, and what quietly restored me?",
-    "Where did I feel most like myself today?",
-    "What am I carrying into tomorrow that I can soften tonight?",
-    "Which conversation stayed with me, and why?",
-    "What small win deserves more credit than I gave it?"
+    "What moment from today do you want to remember?",
+    "Who did you connect with today, and what made it meaningful?",
+    "What are you grateful for right now?",
+    "What challenged you today, and what did you learn?",
+    "What made you smile or feel light today?",
+    "What surprised you today?",
+    "How did you take care of yourself today?",
+    "What small detail from today feels important?",
+    "What do you want to do differently tomorrow?",
+    "What is one intention you want to carry into tomorrow?"
   ]
 }
 
@@ -195,11 +199,10 @@ final class JournalVM: ObservableObject {
   @Published var selectedRitual: JournalRitualTemplate = .threeGoodThings
   @Published var hasAskedForMindfulPrism = false
   
-  private let modelSession = LanguageModelSession()
-  
   init() {
     journalEntries = JournalRepository.loadEntries().sorted { $0.timestamp > $1.timestamp }
     consumePendingIntentState()
+    restoreAutosavedDraftIfNeeded()
   }
   
   var suggestedPrompts: [String] {
@@ -324,15 +327,12 @@ final class JournalVM: ObservableObject {
       )
     }
     
-    if let gratitude = entry.gratitude {
-      let details = [
-        gratitude.needsMet,
-        gratitude.momentsShared,
-        gratitude.quietBlessings
-      ]
-      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-      .filter { !$0.isEmpty }
-      .joined(separator: " • ")
+    let gratitudeDetails = JournalGrounding.groundedGratitudeDetails(
+      gratitude: entry.gratitude,
+      originalText: entry.originalText
+    )
+    if !gratitudeDetails.isEmpty {
+      let details = gratitudeDetails.joined(separator: " • ")
       
       if !details.isEmpty {
         beats.append(
@@ -421,6 +421,14 @@ final class JournalVM: ObservableObject {
       statusMessage = "Siri opened a fresh reflection for you."
     }
   }
+
+  func restoreAutosavedDraftIfNeeded() {
+    guard currentEntryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    guard let autosavedDraft = JournalRepository.loadAutosaveDraft() else { return }
+    guard autosavedDraft.trimmingCharacters(in: .whitespacesAndNewlines).isMeaningful else { return }
+    currentEntryText = autosavedDraft
+    statusMessage = "Your unfinished page is ready to continue."
+  }
   
   func dismissStatus() {
     statusMessage = nil
@@ -430,6 +438,7 @@ final class JournalVM: ObservableObject {
     selectedPrompt = prompt
     currentEntryText = prompt
     hasAskedForMindfulPrism = false
+    JournalRepository.saveAutosaveDraft(prompt)
   }
   
   func applyRitual(_ ritual: JournalRitualTemplate) {
@@ -438,6 +447,11 @@ final class JournalVM: ObservableObject {
     
     guard !ritual.starterText.isEmpty else { return }
     currentEntryText = ritual.starterText
+    JournalRepository.saveAutosaveDraft(ritual.starterText)
+  }
+
+  func handleDraftChange(_ draft: String) {
+    JournalRepository.saveAutosaveDraft(draft)
   }
   
   func saveQuickCapture() {
@@ -450,6 +464,7 @@ final class JournalVM: ObservableObject {
     )
     persistEntries()
     currentEntryText = ""
+    JournalRepository.clearAutosaveDraft()
     statusMessage = "Quick capture saved. You can reflect on it later."
     hasAskedForMindfulPrism = false
   }
@@ -505,6 +520,7 @@ final class JournalVM: ObservableObject {
       journalEntries.insert(formattedEntry, at: 0)
       persistEntries()
       currentEntryText = ""
+      JournalRepository.clearAutosaveDraft()
       statusMessage = "Your new chapter has been shaped and saved."
       hasAskedForMindfulPrism = showMindfulPrism
     } catch {
@@ -542,6 +558,7 @@ final class JournalVM: ObservableObject {
       journalEntries.insert(savedEntry, at: 0)
       persistEntries()
       currentEntryText = ""
+      JournalRepository.clearAutosaveDraft()
       statusMessage = "Reflection image saved to your journal history."
     } catch {
       statusMessage = "Image generation was unavailable just now."
@@ -559,6 +576,11 @@ final class JournalVM: ObservableObject {
     journalEntries.remove(atOffsets: offsets)
     persistEntries()
   }
+
+  func deleteEntry(entryID: UUID) {
+    journalEntries.removeAll { $0.id == entryID }
+    persistEntries()
+  }
   
   private func persistEntries() {
     journalEntries.sort { $0.timestamp > $1.timestamp }
@@ -566,76 +588,25 @@ final class JournalVM: ObservableObject {
   }
   
   private func processEntry(_ text: String) async throws -> FormattedJournalEntry {
-    let prompt = buildStructuredPrompt(from: text)
-    var lastEntry = FormattedJournalEntry(originalText: text, captureSource: "ai-reflection")
-    
-    let stream = modelSession.streamResponse(
-      to: prompt,
-      generating: JournalReflection.self,
-      options: GenerationOptions(temperature: 0.8)
-    )
-    
-    for try await item in stream {
-      let partialEntry = mapToFormattedEntry(
-        originalText: text,
-        reflection: item.content
-      )
-      streamingEntry = partialEntry
-      lastEntry = partialEntry
-    }
-    
-    lastEntry.isProcessed = true
-    return lastEntry
-  }
-  
-  private func mapToFormattedEntry(
-    originalText: String,
-    reflection: JournalReflection.PartiallyGenerated
-  ) -> FormattedJournalEntry {
+    let reflection = makeReflection(from: text)
     var entry = FormattedJournalEntry(
-      originalText: originalText,
+      originalText: text,
       captureSource: "ai-reflection"
     )
     
-    entry.wordOfTheDay = sanitized(reflection.wordOfTheDay)
-    entry.valueOfTheDay = sanitized(reflection.valueOfTheDay)
-    entry.poeticReflection = sanitized(reflection.poeticReflection)
-    entry.emotionalImpact = sanitized(reflection.emotionalImpact)
-    entry.affirmation = sanitized(reflection.affirmation)
-    entry.tomorrowIntention = sanitized(reflection.tomorrowIntention)
-    
-    if let partialGratitude = reflection.gratitude {
-      let needsMet = partialGratitude.needsMet ?? ""
-      let momentsShared = partialGratitude.momentsShared ?? ""
-      let quietBlessings = partialGratitude.quietBlessings ?? ""
-      
-      if !needsMet.isEmpty || !momentsShared.isEmpty || !quietBlessings.isEmpty {
-        entry.gratitude = GratitudeItems(
-          needsMet: needsMet,
-          momentsShared: momentsShared,
-          quietBlessings: quietBlessings
-        )
-      }
-    }
-    
-    if let partialContrib = reflection.contributions {
-      let creativeWork = sanitized(partialContrib.creativeWork)
-      let service = sanitized(partialContrib.service)
-      let presenceOffered = sanitized(partialContrib.presenceOffered)
-      
-      if creativeWork != nil || service != nil || presenceOffered != nil {
-        entry.contributions = ContributionItems(
-          creativeWork: creativeWork,
-          service: service,
-          presenceOffered: presenceOffered
-        )
-      }
-    }
-    
-    entry.mindfulnessPractice = sanitized(reflection.mindfulnessPractice)
-    entry.spiritualConnection = sanitized(reflection.spiritualConnection)
-    entry.natureConnection = sanitized(reflection.natureConnection)
+    entry.wordOfTheDay = reflection.wordOfTheDay
+    entry.valueOfTheDay = reflection.valueOfTheDay
+    entry.poeticReflection = reflection.poeticReflection
+    entry.emotionalImpact = reflection.emotionalImpact
+    entry.affirmation = reflection.affirmation
+    entry.tomorrowIntention = reflection.tomorrowIntention
+    entry.gratitude = reflection.gratitude
+    entry.contributions = reflection.contributions
+    entry.mindfulnessPractice = reflection.mindfulnessPractice
+    entry.spiritualConnection = reflection.spiritualConnection
+    entry.natureConnection = reflection.natureConnection
     entry.isProcessed = true
+    streamingEntry = entry
     return entry
   }
   
@@ -650,33 +621,44 @@ final class JournalVM: ObservableObject {
     
     return trimmed
   }
-  
-  private func buildStructuredPrompt(from text: String) -> String {
-    """
-    Act as a warm, insightful gratitude journaling guide.
-    Transform the user's note into a grounded gratitude reflection.
+
+  private func makeReflection(from text: String) -> JournalReflection {
+    let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let sentences = normalizedText
+      .split(whereSeparator: \.isNewline)
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
     
-    User note:
-    \(text)
+    let titleSeed = normalizedText.groundingTokens.first?.capitalized ?? "Today"
+    let opening = sentences.first ?? normalizedText.preview(limit: 120)
+    let closing = sentences.last ?? "I want to carry this day gently."
     
-    Produce:
-    - a word of the day
-    - a value of the day
-    - gratitude with needs met, moments shared, and quiet blessings, always grounded in concrete details
-    - contributions with creative work, service, and presence offered
-    - a short poetic reflection
-    - one emotional impact sentence
-    - optional mindfulness, spiritual, and nature connections when genuinely present
-    - an affirmation
-    - a gentle intention for tomorrow
+    let groundedBits = Array(normalizedText.groundingTokens.prefix(3))
+    let gratitude = GratitudeItems(
+      needsMet: groundedBits.first.map { "I noticed \($0) in my day." } ?? "Not present today",
+      momentsShared: groundedBits.dropFirst().first.map { "I want to remember \($0)." } ?? "Not present today",
+      quietBlessings: groundedBits.dropFirst(2).first.map { "A quiet detail was \($0)." } ?? "Not present today"
+    )
     
-    Guidelines:
-    - Prioritize appreciation, perspective, and emotional honesty over self-optimization
-    - Stay faithful to the user's tone and lived experience
-    - Be specific, emotionally intelligent, and concise
-    - If a section is not supported by the note, return "Not present today"
-    - Keep all output friendly for display in short SwiftUI cards
-    """
+    let contributions = ContributionItems(
+      creativeWork: normalizedText.localizedCaseInsensitiveContains("made") ? "I made space for expression today." : nil,
+      service: normalizedText.localizedCaseInsensitiveContains("help") ? "I offered care where I could." : nil,
+      presenceOffered: normalizedText.localizedCaseInsensitiveContains("with") ? "I was present in an ordinary moment." : nil
+    )
+    
+    return JournalReflection(
+      wordOfTheDay: titleSeed,
+      valueOfTheDay: groundedBits.first?.capitalized ?? "Presence",
+      gratitude: gratitude,
+      contributions: contributions,
+      poeticReflection: opening.preview(limit: 90),
+      emotionalImpact: closing.preview(limit: 110),
+      mindfulnessPractice: normalizedText.localizedCaseInsensitiveContains("breathe") ? "A slower breath helped me return to the moment." : nil,
+      spiritualConnection: nil,
+      natureConnection: normalizedText.localizedCaseInsensitiveContains("walk") ? "The day held a small sense of movement and air." : nil,
+      affirmation: "This page is enough exactly as it is.",
+      tomorrowIntention: "Tomorrow I want to notice one honest moment and write it down."
+    )
   }
   
   private func buildImagePrompt(from entry: FormattedJournalEntry) -> String {
@@ -718,7 +700,9 @@ struct CaptureJournalEntryIntent: AppIntent {
       return .result(dialog: IntentDialog("I need a few words to save to your journal."))
     }
     
-    JournalRepository.captureQuickEntry(text: trimmed, source: "siri")
+    _ = await MainActor.run {
+      JournalRepository.captureQuickEntry(text: trimmed, source: "siri")
+    }
     return .result(dialog: IntentDialog("Saved your journal note in JournalAI."))
   }
 }
@@ -737,7 +721,9 @@ struct StartReflectionIntent: AppIntent {
   }
   
   func perform() async throws -> some IntentResult & ProvidesDialog {
-    JournalRepository.savePendingDraft(prompt)
+    await MainActor.run {
+      JournalRepository.savePendingDraft(prompt)
+    }
     return .result(dialog: IntentDialog("Opening JournalAI for your next reflection."))
   }
 }
@@ -748,7 +734,9 @@ struct ReviewLatestInsightIntent: AppIntent {
   static let description = IntentDescription("Hear the latest affirmation or story beat from your journal.")
   
   func perform() async throws -> some IntentResult & ProvidesDialog {
-    guard let latestEntry = JournalRepository.latestEntry() else {
+    guard let latestEntry = await MainActor.run(body: {
+      JournalRepository.latestEntry()
+    }) else {
       return .result(dialog: IntentDialog("You do not have any journal entries yet."))
     }
     
