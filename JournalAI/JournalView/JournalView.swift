@@ -13,6 +13,7 @@ struct JournalView: View {
   @State private var hasOpenedCover = false
   @State private var showCloseConfirm = false
   @State private var showBookshelf = false
+  @State private var nudgeDismissed = false
   
   // Logic to determine what the user is looking at
   private var pages: [DiaryPage] {
@@ -29,6 +30,27 @@ struct JournalView: View {
         VStack(spacing: 0) {
           // 2. Refined Top Bar
           journalTopBar
+          
+          // 2b. Nudge card (contextual, dismissable)
+          if !nudgeDismissed && !isInputFocused,
+             let nudge = NudgeProvider.nudge(for: vm) {
+            NudgeCard(nudge: nudge) {
+              withAnimation(.easeOut(duration: 0.25)) { nudgeDismissed = true }
+            } onTap: { action in
+              switch action {
+              case .openThrowback, .weeklyReflection:
+                showBookshelf = true
+              case .suggestPrompt(let prompt):
+                vm.applyPrompt(prompt)
+              case .streakCelebration:
+                break
+              }
+              withAnimation { nudgeDismissed = true }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
+            .transition(.move(edge: .top).combined(with: .opacity))
+          }
           
           // 3. The Main Writing Surface
           ZStack {
@@ -49,7 +71,9 @@ struct JournalView: View {
         }
       }
       .navigationDestination(isPresented: $showBookshelf) {
-        BookshelfView(entries: vm.journalEntries) { _ in showBookshelf = false }
+        BookshelfView(entries: vm.journalEntries) { _ in
+          showBookshelf = false
+        }
       }
       .onAppear(perform: openCoverIfNeeded)
       .alert("Close Diary?", isPresented: $showCloseConfirm) {
@@ -78,8 +102,20 @@ struct JournalView: View {
         if vm.currentEntryText.isMeaningful { showCloseConfirm = true }
         else { showBookshelf = true }
       } label: {
-        Image(systemName: "book.closed")
-          .font(.system(size: 20, weight: .light))
+        ZStack(alignment: .topTrailing) {
+          Image(systemName: "book.closed")
+            .font(.system(size: 20, weight: .light))
+          if vm.journalEntries.count > 0 {
+            Text("\(min(vm.journalEntries.count, 99))")
+              .font(.system(size: 8, weight: .bold))
+              .foregroundStyle(.white)
+              .padding(2)
+              .frame(minWidth: 14)
+              .background(EtherealTheme.primary)
+              .clipShape(Capsule())
+              .offset(x: 8, y: -6)
+          }
+        }
       }
       
       Spacer()
