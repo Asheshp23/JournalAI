@@ -27,7 +27,9 @@ struct BookshelfView: View {
                 LazyVGrid(columns: columns, spacing: 25) {
                     ForEach(entries) { entry in
                         BookSpineCard(entry: entry)
-                            .onTapGesture { onSelect(entry) }
+                        .onTapGesture {
+
+                        }
                     }
                 }
                 .padding(.horizontal)
