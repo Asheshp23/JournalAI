@@ -1,6 +1,6 @@
-# JournalAI
+# Quiet Pages
 
-JournalAI is a mindful iOS journaling app that treats each day like a chapter instead of a checklist.
+Quiet Pages is a mindful iOS journaling app that treats each day like a chapter instead of a checklist.
 It combines calm, story-based writing with Apple's on-device Foundation Models so reflection can stay private, gentle, and lightweight.
 
 ## Product Direction
@@ -11,7 +11,7 @@ Most journal apps fall into one of a few buckets:
 - mood dashboards
 - AI summaries
 
-JournalAI aims for a different feeling:
+Quiet Pages aims for a different feeling:
 - one quiet screen
 - one page at a time
 - a story-first writing flow

@@ -9,7 +9,7 @@ import AppIntents
 
 @available(iOS 26.0, *)
 @main
-struct JournalAIApp: App {
+struct QuietPagesApp: App {
   init() {
     JournalAppShortcuts.updateAppShortcutParameters()
   }

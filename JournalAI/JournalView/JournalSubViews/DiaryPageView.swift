@@ -36,7 +36,9 @@ struct DiaryPageView: View {
           }
           .padding(.horizontal, 40) // Align text with paper margin
           .padding(.top, 10)
+          .padding(.bottom, 32)
         }
+        .scrollDismissesKeyboard(.interactively)
       }
     }
     .clipShape(RoundedRectangle(cornerRadius: 20))

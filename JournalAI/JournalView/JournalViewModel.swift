@@ -690,7 +690,7 @@ struct CaptureJournalEntryIntent: AppIntent {
   var entry: String
   
   static var parameterSummary: some ParameterSummary {
-    Summary("Save \(\.$entry) to JournalAI")
+    Summary("Save \(\.$entry) to Quiet Pages")
   }
   
   func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -703,14 +703,14 @@ struct CaptureJournalEntryIntent: AppIntent {
     _ = await MainActor.run {
       JournalRepository.captureQuickEntry(text: trimmed, source: "siri")
     }
-    return .result(dialog: IntentDialog("Saved your journal note in JournalAI."))
+    return .result(dialog: IntentDialog("Saved your journal note in Quiet Pages."))
   }
 }
 
 @available(iOS 26.0, *)
 struct StartReflectionIntent: AppIntent {
   static let title: LocalizedStringResource = "Start Reflection"
-  static let description = IntentDescription("Open JournalAI with a prompt or draft ready to reflect on.")
+  static let description = IntentDescription("Open Quiet Pages with a prompt or draft ready to reflect on.")
   static let openAppWhenRun = true
   
   @Parameter(title: "Reflection Prompt")
@@ -724,7 +724,7 @@ struct StartReflectionIntent: AppIntent {
     await MainActor.run {
       JournalRepository.savePendingDraft(prompt)
     }
-    return .result(dialog: IntentDialog("Opening JournalAI for your next reflection."))
+    return .result(dialog: IntentDialog("Opening Quiet Pages for your next reflection."))
   }
 }
 

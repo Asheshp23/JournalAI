@@ -70,6 +70,15 @@ struct JournalView: View {
             .padding(20)
         }
       }
+      .ignoresSafeArea(.keyboard, edges: .bottom)
+      .toolbar {
+        ToolbarItemGroup(placement: .keyboard) {
+          Spacer()
+          Button("Done") {
+            isInputFocused = false
+          }
+        }
+      }
       .navigationDestination(isPresented: $showBookshelf) {
         BookshelfView(entries: vm.journalEntries) { _ in
           showBookshelf = false
@@ -189,6 +198,9 @@ struct JournalView: View {
   private func openCoverIfNeeded() {
     guard !hasOpenedCover else { return }
     withAnimation(.easeInOut(duration: 1.2)) { coverOpenProgress = 1 }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { hasOpenedCover = true }
+    Task {
+      try? await Task.sleep(for: .seconds(1.2))
+      hasOpenedCover = true
+    }
   }
 }
