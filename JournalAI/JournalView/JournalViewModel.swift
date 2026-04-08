@@ -10,7 +10,6 @@ import Foundation
 import ImagePlayground
 import SwiftUI
 import UIKit
-import UserNotifications
 
 @available(iOS 26.0, *)
 enum JournalRitualTemplate: String, CaseIterable, Hashable {
@@ -98,31 +97,6 @@ enum JournalRitualTemplate: String, CaseIterable, Hashable {
   }
 }
 @available(iOS 26.0, *)
-struct JournalInsightMetrics {
-  let totalEntries: Int
-  let reflectedEntries: Int
-  let weeklyEntries: Int
-  let streakDays: Int
-  let favoriteAffirmations: Int
-}
-
-@available(iOS 26.0, *)
-struct StreakDay: Identifiable {
-  let id = UUID()
-  let label: String
-  let isCompleted: Bool
-  let isToday: Bool
-}
-
-@available(iOS 26.0, *)
-struct StoryBeat: Identifiable {
-  let id = UUID()
-  let title: String
-  let body: String
-  let systemImage: String
-}
-
-@available(iOS 26.0, *)
 @MainActor
 enum JournalRepository {
   private static let pendingDraftKey = "intent.pendingDraft"
@@ -172,30 +146,12 @@ enum JournalRepository {
 }
 
 @available(iOS 26.0, *)
-enum JournalPromptProvider {
-  static let prompts = [
-    "What moment from today do you want to remember?",
-    "Who did you connect with today, and what made it meaningful?",
-    "What are you grateful for right now?",
-    "What challenged you today, and what did you learn?",
-    "What made you smile or feel light today?",
-    "What surprised you today?",
-    "How did you take care of yourself today?",
-    "What small detail from today feels important?",
-    "What do you want to do differently tomorrow?",
-    "What is one intention you want to carry into tomorrow?"
-  ]
-}
-
-@available(iOS 26.0, *)
 @MainActor
 final class JournalVM: ObservableObject {
   @Published var journalEntries: [FormattedJournalEntry]
   @Published var currentEntryText = ""
   @Published var isProcessing = false
-  @Published var streamingEntry: FormattedJournalEntry?
   @Published var statusMessage: String?
-  @Published var selectedPrompt: String?
   @Published var selectedRitual: JournalRitualTemplate = .threeGoodThings
   @Published var hasAskedForMindfulPrism = false
   
@@ -205,41 +161,9 @@ final class JournalVM: ObservableObject {
     restoreAutosavedDraftIfNeeded()
   }
   
-  var suggestedPrompts: [String] {
-    JournalPromptProvider.prompts
-  }
-  
-  var latestEntry: FormattedJournalEntry? {
-    streamingEntry ?? journalEntries.first
-  }
-  
-  var latestAffirmation: String? {
-    journalEntries.first { !($0.affirmation ?? "").isEmpty }?.affirmation
-  }
-  
-  var displayedStoryEntry: FormattedJournalEntry? {
-    if hasAskedForMindfulPrism {
-      return latestEntry
-    }
-    
-    return journalEntries.first
-  }
-  
   var throwbackEntry: FormattedJournalEntry? {
     let cutoffDate = Calendar.current.date(byAdding: .day, value: -3, to: Date()) ?? Date.distantPast
     return journalEntries.first(where: { $0.timestamp < cutoffDate })
-  }
-  
-  var latestGratitudeItems: [String] {
-    guard let gratitude = latestEntry?.gratitude else { return [] }
-    
-    return [
-      gratitude.needsMet,
-      gratitude.momentsShared,
-      gratitude.quietBlessings
-    ]
-    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-    .filter { !$0.isEmpty }
   }
   
   var onThisDayEntry: FormattedJournalEntry? {
@@ -252,23 +176,6 @@ final class JournalVM: ObservableObject {
       let month = calendar.component(.month, from: $0.timestamp)
       let day = calendar.component(.day, from: $0.timestamp)
       return month == currentMonth && day == currentDay && !calendar.isDate($0.timestamp, inSameDayAs: today)
-    }
-  }
-  
-  var streakWeek: [StreakDay] {
-    let calendar = Calendar.current
-    let today = calendar.startOfDay(for: Date())
-    let formatter = DateFormatter()
-    formatter.dateFormat = "EEEEE"
-    
-    return (0..<7).compactMap { offset in
-      guard let date = calendar.date(byAdding: .day, value: offset - 6, to: today) else { return nil }
-      let isCompleted = journalEntries.contains { calendar.isDate($0.timestamp, inSameDayAs: date) }
-      return StreakDay(
-        label: formatter.string(from: date),
-        isCompleted: isCompleted,
-        isToday: calendar.isDate(date, inSameDayAs: today)
-      )
     }
   }
   
@@ -311,110 +218,6 @@ final class JournalVM: ObservableObject {
     }
   }
   
-  var storyBeats: [StoryBeat] {
-    guard let entry = displayedStoryEntry else { return [] }
-    
-    var beats: [StoryBeat] = []
-    
-    let openingLine = entry.originalText.preview(limit: 120)
-    if !openingLine.isEmpty {
-      beats.append(
-        StoryBeat(
-          title: "Opening Scene",
-          body: openingLine,
-          systemImage: "text.alignleft"
-        )
-      )
-    }
-    
-    let gratitudeDetails = JournalGrounding.groundedGratitudeDetails(
-      gratitude: entry.gratitude,
-      originalText: entry.originalText
-    )
-    if !gratitudeDetails.isEmpty {
-      let details = gratitudeDetails.joined(separator: " • ")
-      
-      if !details.isEmpty {
-        beats.append(
-          StoryBeat(
-            title: "Quiet Gifts",
-            body: details,
-            systemImage: "gift.fill"
-          )
-        )
-      }
-    }
-    
-    if hasAskedForMindfulPrism, let affirmation = entry.affirmation {
-      beats.append(
-        StoryBeat(
-          title: "Mindful Prism",
-          body: affirmation,
-          systemImage: "sparkles.rectangle.stack"
-        )
-      )
-    } else if let emotionalImpact = entry.emotionalImpact {
-      beats.append(
-        StoryBeat(
-          title: "What Stayed",
-          body: emotionalImpact,
-          systemImage: "waveform.path.ecg"
-        )
-      )
-    }
-    
-    if let tomorrowIntention = entry.tomorrowIntention {
-      beats.append(
-        StoryBeat(
-          title: "Next Page",
-          body: tomorrowIntention,
-          systemImage: "arrow.right.circle.fill"
-        )
-      )
-    }
-    
-    return beats
-  }
-  
-  var storyArchive: [FormattedJournalEntry] {
-    Array(journalEntries.prefix(8))
-  }
-  
-  var metrics: JournalInsightMetrics {
-    let calendar = Calendar.current
-    let weekInterval = calendar.dateInterval(of: .weekOfYear, for: Date())
-    let reflectedEntries = journalEntries.filter { $0.isProcessed }.count
-    let weeklyEntries = journalEntries.filter { entry in
-      guard let weekInterval else { return false }
-      return weekInterval.contains(entry.timestamp)
-    }.count
-    
-    let entryDays = Set(journalEntries.map { calendar.startOfDay(for: $0.timestamp) })
-    var streakDays = 0
-    var dayCursor = calendar.startOfDay(for: Date())
-    
-    while entryDays.contains(dayCursor) {
-      streakDays += 1
-      guard let previousDay = calendar.date(byAdding: .day, value: -1, to: dayCursor) else {
-        break
-      }
-      dayCursor = previousDay
-    }
-    
-    return JournalInsightMetrics(
-      totalEntries: journalEntries.count,
-      reflectedEntries: reflectedEntries,
-      weeklyEntries: weeklyEntries,
-      streakDays: streakDays,
-      favoriteAffirmations: journalEntries.filter { $0.isFavorite }.count
-    )
-  }
-  
-  var reflectionCompletionRatio: Double {
-    guard metrics.totalEntries > 0 else { return 0 }
-    return Double(metrics.reflectedEntries) / Double(metrics.totalEntries)
-  }
-  
   func consumePendingIntentState() {
     if let pendingDraft = JournalRepository.takePendingDraft() {
       currentEntryText = pendingDraft
@@ -435,7 +238,6 @@ final class JournalVM: ObservableObject {
   }
   
   func applyPrompt(_ prompt: String) {
-    selectedPrompt = prompt
     currentEntryText = prompt
     hasAskedForMindfulPrism = false
     JournalRepository.saveAutosaveDraft(prompt)
@@ -473,60 +275,22 @@ final class JournalVM: ObservableObject {
     hasAskedForMindfulPrism = true
   }
   
-  func scheduleDailyReminder(hour: Int, title: String, body: String) async {
-    let center = UNUserNotificationCenter.current()
-    let granted = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
-    guard granted == true else {
-      statusMessage = "Notifications are off. You can enable them in Settings."
-      return
-    }
-    
-    let content = UNMutableNotificationContent()
-    content.title = title
-    content.body = body
-    content.sound = .default
-    
-    var components = DateComponents()
-    components.hour = hour
-    components.minute = 0
-    
-    let request = UNNotificationRequest(
-      identifier: "journalai.reminder.\(hour)",
-      content: content,
-      trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-    )
-    
-    center.removePendingNotificationRequests(withIdentifiers: [
-      "journalai.reminder.8",
-      "journalai.reminder.20"
-    ])
-    try? await center.add(request)
-    statusMessage = "Daily reminder scheduled."
-  }
-  
   func analyzeAndSaveEntry(showMindfulPrism: Bool = false) async {
     let trimmed = currentEntryText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard trimmed.isMeaningful else { return }
     
     isProcessing = true
-    streamingEntry = nil
     defer {
       isProcessing = false
-      streamingEntry = nil
     }
     
-    do {
-      let formattedEntry = try await processEntry(trimmed)
-      journalEntries.insert(formattedEntry, at: 0)
-      persistEntries()
-      currentEntryText = ""
-      JournalRepository.clearAutosaveDraft()
-      statusMessage = "Your new chapter has been shaped and saved."
-      hasAskedForMindfulPrism = showMindfulPrism
-    } catch {
-      statusMessage = "Reflection failed. Your draft is still here."
-      print("Failed to process entry: \(error)")
-    }
+    let formattedEntry = processEntry(trimmed)
+    journalEntries.insert(formattedEntry, at: 0)
+    persistEntries()
+    currentEntryText = ""
+    JournalRepository.clearAutosaveDraft()
+    statusMessage = "Your new chapter has been shaped and saved."
+    hasAskedForMindfulPrism = showMindfulPrism
   }
   
   func generateImage() async {
@@ -534,14 +298,12 @@ final class JournalVM: ObservableObject {
     guard trimmed.isMeaningful else { return }
     
     isProcessing = true
-    streamingEntry = nil
     defer {
       isProcessing = false
-      streamingEntry = nil
     }
     
     do {
-      let formattedEntry = try await processEntry(trimmed)
+      let formattedEntry = processEntry(trimmed)
       let imageCreator = try await ImageCreator()
       let images = imageCreator.images(
         for: [.text(buildImagePrompt(from: formattedEntry))],
@@ -565,17 +327,6 @@ final class JournalVM: ObservableObject {
       print("Failed to generate image: \(error)")
     }
   }
-  
-  func toggleFavorite(entryID: UUID) {
-    guard let index = journalEntries.firstIndex(where: { $0.id == entryID }) else { return }
-    journalEntries[index].isFavorite.toggle()
-    persistEntries()
-  }
-  
-  func deleteEntries(at offsets: IndexSet) {
-    journalEntries.remove(atOffsets: offsets)
-    persistEntries()
-  }
 
   func deleteEntry(entryID: UUID) {
     journalEntries.removeAll { $0.id == entryID }
@@ -587,7 +338,7 @@ final class JournalVM: ObservableObject {
     JournalRepository.saveEntries(journalEntries)
   }
   
-  private func processEntry(_ text: String) async throws -> FormattedJournalEntry {
+  private func processEntry(_ text: String) -> FormattedJournalEntry {
     let reflection = makeReflection(from: text)
     var entry = FormattedJournalEntry(
       originalText: text,
@@ -606,20 +357,7 @@ final class JournalVM: ObservableObject {
     entry.spiritualConnection = reflection.spiritualConnection
     entry.natureConnection = reflection.natureConnection
     entry.isProcessed = true
-    streamingEntry = entry
     return entry
-  }
-  
-  private func sanitized(_ value: String?) -> String? {
-    guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
-      return nil
-    }
-    
-    if trimmed.caseInsensitiveCompare("Not present today") == .orderedSame {
-      return nil
-    }
-    
-    return trimmed
   }
 
   private func makeReflection(from text: String) -> JournalReflection {

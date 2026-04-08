@@ -28,8 +28,6 @@ struct JournalNudge: Identifiable {
     enum NudgeAction {
         case openThrowback
         case suggestPrompt(String)
-        case weeklyReflection
-        case streakCelebration(Int)
     }
 }
 
@@ -97,30 +95,35 @@ struct NudgeCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(EtherealTheme.elevatedSurface)
-                    .frame(width: 36, height: 36)
-                Image(systemName: nudge.icon)
-                    .font(.system(size: 14))
-                    .foregroundStyle(EtherealTheme.secondary)
+            Button {
+                onTap(nudge.action)
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(EtherealTheme.elevatedSurface)
+                            .frame(width: 36, height: 36)
+                        Image(systemName: nudge.icon)
+                            .font(.system(size: 14))
+                            .foregroundStyle(EtherealTheme.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(nudge.headline)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(EtherealTheme.textMain)
+                        Text(nudge.subtext)
+                            .font(.caption)
+                            .foregroundStyle(EtherealTheme.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 4)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
-            // Text
-            VStack(alignment: .leading, spacing: 2) {
-                Text(nudge.headline)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(EtherealTheme.textMain)
-                Text(nudge.subtext)
-                    .font(.caption)
-                    .foregroundStyle(EtherealTheme.textSecondary)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 4)
-
-            // Dismiss
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .semibold))
@@ -146,9 +149,6 @@ struct NudgeCard: View {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.75).delay(0.1)) {
                 appeared = true
             }
-        }
-        .onTapGesture {
-            onTap(nudge.action)
         }
     }
 }

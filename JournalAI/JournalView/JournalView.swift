@@ -1,14 +1,11 @@
 import SwiftUI
-import UIKit
 
 @available(iOS 26.0, *)
 struct JournalView: View {
   @ObservedObject var vm: JournalVM
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @FocusState private var isInputFocused: Bool
   
   @State private var currentPageIndex = 0
-  @State private var pageTurnProgress = 0.0
   @State private var coverOpenProgress = 0.0
   @State private var hasOpenedCover = false
   @State private var showCloseConfirm = false
@@ -38,12 +35,10 @@ struct JournalView: View {
               withAnimation(.easeOut(duration: 0.25)) { nudgeDismissed = true }
             } onTap: { action in
               switch action {
-              case .openThrowback, .weeklyReflection:
+              case .openThrowback:
                 showBookshelf = true
               case .suggestPrompt(let prompt):
                 vm.applyPrompt(prompt)
-              case .streakCelebration:
-                break
               }
               withAnimation { nudgeDismissed = true }
             }
@@ -80,9 +75,7 @@ struct JournalView: View {
         }
       }
       .navigationDestination(isPresented: $showBookshelf) {
-        BookshelfView(entries: vm.journalEntries) { _ in
-          showBookshelf = false
-        }
+        BookshelfView(entries: vm.journalEntries)
       }
       .onAppear(perform: openCoverIfNeeded)
       .alert("Close Diary?", isPresented: $showCloseConfirm) {

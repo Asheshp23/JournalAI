@@ -9,21 +9,23 @@ import SwiftUI
 
 struct BookshelfView: View {
   let entries: [FormattedJournalEntry]
-  let onSelect: (FormattedJournalEntry) -> Void
   
   @State private var selectedFilter: MoodFilter = .all
   @State private var selectedEntry: FormattedJournalEntry? = nil
   
   private var groupedEntries: [(String, [FormattedJournalEntry])] {
-    let fmt = DateFormatter()
-    fmt.dateFormat = "MMMM yyyy"
-    let filtered = filteredEntries
-    let grouped = Dictionary(grouping: filtered) { fmt.string(from: $0.timestamp) }
+    let formatter = DateFormatter()
+    formatter.dateFormat = "MMMM yyyy"
+    let grouped = Dictionary(grouping: filteredEntries) { formatter.string(from: $0.timestamp) }
     return grouped.sorted { a, b in
-      let df = DateFormatter(); df.dateFormat = "MMMM yyyy"
-      let da = df.date(from: a.0) ?? .distantPast
-      let db = df.date(from: b.0) ?? .distantPast
-      return da > db
+      guard
+        let leftDate = formatter.date(from: a.0),
+        let rightDate = formatter.date(from: b.0)
+      else {
+        return a.0 > b.0
+      }
+
+      return leftDate > rightDate
     }
   }
   
